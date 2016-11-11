@@ -2,9 +2,10 @@ CC=gcc
 CFLAGS=-Wall -Wpedantic -g -O0 -Iinclude -std=c99 -fPIC
 CFLAGS+=-I/opt/local/include
 LDFLAGS=-lgsl -lgslcblas   -lm -Lclass -lclass
+LDFLAGS+=-L/usr/local/lib/
 
 
-OBJECTS=src/ccl_core.o src/ccl_error.o src/ccl_utils.o src/ccl_power.o src/ccl_placeholder.o src/ccl_lsst_specs.o src/ccl_background.o
+OBJECTS=src/ccl_core.o src/ccl_error.o src/ccl_utils.o src/ccl_power.o src/ccl_placeholder.o src/ccl_lsst_specs.o src/ccl_background.o src/ccl_halofit.o
 
 TESTS=tests/ccl_test.c tests/ccl_test_utils.c tests/ccl_test_params.c tests/ccl_test_distances.c tests/ccl_test_growth.c tests/ccl_test_bbks.c
 
