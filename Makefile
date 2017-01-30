@@ -34,6 +34,9 @@ test: $(TESTS) $(LIB)
 src/%.o: src/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
 
+install:
+	cp $(LIB) /usr/local/lib
+	cp $(DYLIB) /usr/local/lib
 
 clean:
 	rm -rf *.dSYM *.o *.a tests/ccl_test test_core_cosmo src/*.o lib/*.a lib/*.so lib/*.dSYM  tests/*.dSYM
