@@ -7,6 +7,7 @@
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_integration.h>
 #include <gsl/gsl_roots.h>
+#include <gsl/gsl_deriv.h>
 
 #define R_LOW 0.1
 #define R_HIGH 10
@@ -16,6 +17,11 @@ typedef struct {
   ccl_cosmology *cosmo;
   double R;
 } SigmaR_pars;
+
+typedef struct {
+	double a, b, c, gamma, alpha, beta, mu, nu;
+} halofit_param;
+
 
 static double sigmaR_gauss_integrand(double lk,void *params)
 {
@@ -60,8 +66,6 @@ static double sigmaR_gauss_root_finding(double R, void *params)
     return ccl_sigmaR_gauss(cosmo, R) - 1.;
 }
 
-
-
 double ccl_k_sigma_m(ccl_cosmology* cosmo){
 // returns the nonlinear scale (k_sigma)^-1
 
@@ -91,4 +95,66 @@ double ccl_k_sigma_m(ccl_cosmology* cosmo){
     gsl_root_fsolver_free (s);
 
     return R;
+}
+
+static double log_sigma(double R, void *params)
+{
+    ccl_cosmology* cosmo = (ccl_cosmology*)params;
+    return log(ccl_sigmaR_gauss(cosmo, R));
+}
+
+static double sigmaR_deriv(double R, void *params)
+{ // d ln(sigma) / d ln(r)
+	gsl_function F;
+	double result, abserr;
+
+	F.function = &log_sigma;
+	F.params = params;
+
+	gsl_deriv_central (&F, R, 1e-6, &result, &abserr);
+	result *= R; // d ln R = 1/R * dR
+	
+//	printf("R = %f, derivative d ln(sigma) / d ln(r) = %.10f (+/- %.10f)\n", R, result, abserr);
+	return result;
+}
+
+double ccl_n_eff(ccl_cosmology* cosmo)
+{ // returns effective spectral index
+	return -sigmaR_deriv(ccl_k_sigma_m(cosmo), cosmo)-3;
+}
+
+static double sigmaR_gauss_2nd_deriv(double R, void *params)
+{ // d^2 ln(sigma) / d ln(r)^2
+	gsl_function F;
+	double result, abserr;
+
+	F.function = &sigmaR_deriv;
+	F.params = params;
+	
+	gsl_deriv_central (&F, R, 1e-6, &result, &abserr);
+	result *= R; // d ln R = 1/R * dR
+
+//	printf("R = %f, derivative d^2 ln(sigma) / d ln(r)^2 = %.10f (+/- %.10f)\n", R, result, abserr);
+	return result;
+}
+
+double ccl_curvature(ccl_cosmology* cosmo)
+{ // returns curvature
+	return -sigmaR_gauss_2nd_deriv(ccl_k_sigma_m(cosmo), cosmo);
+}
+
+void ccl_set_Takahashi_fit(ccl_cosmology* cosmo, halofit_param* param, double n_eff, double C, double a)
+{
+	double w = cosmo->params.w0 + (1-a)*cosmo->params.wa;
+	
+	param->a = 1.5222 + 2.8553*n_eff + 2.3706*pow(n_eff, 2.) + 0.9903*pow(n_eff, 3.) + 0.2250*pow(n_eff, 4.) \
+				- 0.6038*C +0.1749*cosmo->params.Omega_l*(1.+w);
+	param->a = pow(10., param->a);
+	
+	param->b = -0.5642 + 0.5864*n_eff + 0.5716*pow(n_eff, 2.) + 1.5474*C + 0.2279*cosmo->params.Omega_l*(1+w);
+	param->b = pow(10., param->b);
+	
+	param->c = 0.3698 + 2.0404*n_eff + 0.8161*pow(n_eff, 2.) + 0.5869*C;
+	param->c = pow(10., param->c);
+	
 }
