@@ -19,7 +19,7 @@ typedef struct {
 } SigmaR_pars;
 
 typedef struct {
-	double a, b, c, gamma, alpha, beta, mu, nu;
+	double a, b, c, gamma, alpha, beta, mu, nu, f1, f2, f3;
 } halofit_param;
 
 
@@ -157,4 +157,20 @@ void ccl_set_Takahashi_fit(ccl_cosmology* cosmo, halofit_param* param, double n_
 	param->c = 0.3698 + 2.0404*n_eff + 0.8161*pow(n_eff, 2.) + 0.5869*C;
 	param->c = pow(10., param->c);
 	
+	param->gamma = 0.1971 - 0.0843*n_eff + 0.8460*C;
+	
+	param->alpha = abs(6.0835 + 1.3373*n_eff - 0.1959*pow(n_eff, 2.) - 5.5274*C);
+	
+	param->beta = 2.0379 - 0.7354*n_eff + 0.3157*pow(n_eff, 2.) + 1.2490*pow(n_eff, 3.) + 0.3980*pow(n_eff, 4.) - 0.1682*C;
+	
+	param->mu = 0;
+	
+	param->nu = 5.2105 + 3.6902*n_eff;
+	param->nu = pow(10., param->nu);
+	
+	param->f1 = pow(cosmo->params.Omega_m, -0.0307);
+	
+	param->f2 = pow(cosmo->params.Omega_m, -0.0585);
+	
+	param->f3 = pow(cosmo->params.Omega_m, 0.0743);
 }
