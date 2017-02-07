@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "ccl_core.h"
 #include "ccl_power.h"
+#include "ccl_halofit.h"
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_integration.h>
 #include <gsl/gsl_roots.h>
@@ -18,11 +19,6 @@ typedef struct {
   double R;
 } SigmaR_pars;
 
-typedef struct {
-	double a, b, c, gamma, alpha, beta, mu, nu, f1, f2, f3;
-} halofit_param;
-
-
 static double sigmaR_gauss_integrand(double lk,void *params)
 {
   SigmaR_pars *par=(SigmaR_pars *)params;
@@ -36,7 +32,7 @@ static double sigmaR_gauss_integrand(double lk,void *params)
   return pk*k*k*k*w;
 }
 
-double ccl_sigmaR_gauss(ccl_cosmology* cosmo, double R)
+static double ccl_sigmaR_gauss(ccl_cosmology* cosmo, double R)
 { // returns sigma_r with gaussian window function
 
   SigmaR_pars par;
@@ -66,7 +62,7 @@ static double sigmaR_gauss_root_finding(double R, void *params)
     return ccl_sigmaR_gauss(cosmo, R) - 1.;
 }
 
-double ccl_k_sigma_m(ccl_cosmology* cosmo){
+static double ccl_k_sigma_m(ccl_cosmology* cosmo){
 // returns the nonlinear scale (k_sigma)^-1
 
     int status;
@@ -118,9 +114,9 @@ static double sigmaR_deriv(double R, void *params)
 	return result;
 }
 
-double ccl_n_eff(ccl_cosmology* cosmo)
+static double ccl_n_eff(ccl_cosmology* cosmo, double k_sigma_m)
 { // returns effective spectral index
-	return -sigmaR_deriv(ccl_k_sigma_m(cosmo), cosmo)-3;
+	return -sigmaR_deriv(k_sigma_m, cosmo)-3;
 }
 
 static double sigmaR_gauss_2nd_deriv(double R, void *params)
@@ -138,12 +134,12 @@ static double sigmaR_gauss_2nd_deriv(double R, void *params)
 	return result;
 }
 
-double ccl_curvature(ccl_cosmology* cosmo)
+static double ccl_curvature(ccl_cosmology* cosmo, double k_sigma_m)
 { // returns curvature
-	return -sigmaR_gauss_2nd_deriv(ccl_k_sigma_m(cosmo), cosmo);
+	return -sigmaR_gauss_2nd_deriv(k_sigma_m, cosmo);
 }
 
-void ccl_set_Takahashi_fit(ccl_cosmology* cosmo, halofit_param* param, double n_eff, double C, double a)
+static void ccl_set_Takahashi_fit(ccl_cosmology* cosmo, halofit_param* param, double n_eff, double C, double a)
 {
 	double w = cosmo->params.w0 + (1-a)*cosmo->params.wa;
 	
@@ -159,7 +155,7 @@ void ccl_set_Takahashi_fit(ccl_cosmology* cosmo, halofit_param* param, double n_
 	
 	param->gamma = 0.1971 - 0.0843*n_eff + 0.8460*C;
 	
-	param->alpha = abs(6.0835 + 1.3373*n_eff - 0.1959*pow(n_eff, 2.) - 5.5274*C);
+	param->alpha = fabs(6.0835 + 1.3373*n_eff - 0.1959*pow(n_eff, 2.) - 5.5274*C);
 	
 	param->beta = 2.0379 - 0.7354*n_eff + 0.3157*pow(n_eff, 2.) + 1.2490*pow(n_eff, 3.) + 0.3980*pow(n_eff, 4.) - 0.1682*C;
 	
@@ -173,4 +169,69 @@ void ccl_set_Takahashi_fit(ccl_cosmology* cosmo, halofit_param* param, double n_
 	param->f2 = pow(cosmo->params.Omega_m, -0.0585);
 	
 	param->f3 = pow(cosmo->params.Omega_m, 0.0743);
+}
+
+static double ccl_one_halo_term(ccl_cosmology* cosmo, double a, double k, ccl_cosmology_halofit* cosmo_halo_fit)
+{
+	double y = k*cosmo_halo_fit->k_sigma_m;
+	double one_halo_prime = cosmo_halo_fit->param.a*pow(y, 3*cosmo_halo_fit->param.f1) /
+		(1 + cosmo_halo_fit->param.b*pow(y, cosmo_halo_fit->param.f2) + 
+		pow(cosmo_halo_fit->param.c*cosmo_halo_fit->param.f3*y, 3-cosmo_halo_fit->param.gamma));
+
+	return one_halo_prime / (1 + cosmo_halo_fit->param.mu/y +
+		cosmo_halo_fit->param.nu/pow(y, 2.));
+}
+
+static double ccl_two_halo_term(ccl_cosmology* cosmo, double a, double k, ccl_cosmology_halofit* cosmo_halo_fit)
+{
+	double fy = k*cosmo_halo_fit->k_sigma_m/4. + pow(k*cosmo_halo_fit->k_sigma_m, 2.)/8.;
+
+	double pk = ccl_linear_matter_power(cosmo, a, k);
+	pk *= pow(k, 3.) / (2*M_PI*M_PI);
+	
+	return pk*pow(1+pk, cosmo_halo_fit->param.beta)/(1+cosmo_halo_fit->param.alpha*pk)*exp(fy);
+}
+
+ccl_cosmology_halofit ccl_new_ccl_cosmology_halofit()
+{
+	ccl_cosmology_halofit tmp;
+	tmp.computed_halo_fit=false;
+	return tmp;
+}
+
+void ccl_cosmology_init_halofit(ccl_cosmology* cosmo, double a, ccl_cosmology_halofit* cosmo_halo_fit)
+{
+	if (cosmo_halo_fit->computed_halo_fit) return;
+	
+	printf("# Computing halofit parameters.\n");
+	cosmo_halo_fit->k_sigma_m = ccl_k_sigma_m(cosmo);
+	cosmo_halo_fit->n_eff = ccl_n_eff(cosmo, cosmo_halo_fit->k_sigma_m);
+	cosmo_halo_fit->C = ccl_curvature(cosmo, cosmo_halo_fit->k_sigma_m);
+	ccl_set_Takahashi_fit(cosmo, &cosmo_halo_fit->param, cosmo_halo_fit->n_eff, cosmo_halo_fit->C, a);
+	cosmo_halo_fit->computed_halo_fit = true;
+	
+	printf("# Computed parameters are:\n\
+#	k_sigma_m = %f\n\
+#	n_eff = %f\n\
+#	C = %f\n\
+#	a = %f\n\
+#	b = %f\n\
+#	c = %f\n\
+#	gamma = %f\n\
+#	alpha = %f\n\
+#	beta = %f\n\
+#	mu = %f\n\
+#	nu = %f\n",
+			cosmo_halo_fit->k_sigma_m, cosmo_halo_fit->n_eff, cosmo_halo_fit->C,
+			cosmo_halo_fit->param.a, cosmo_halo_fit->param.b, cosmo_halo_fit->param.c,
+			cosmo_halo_fit->param.gamma, cosmo_halo_fit->param.alpha, cosmo_halo_fit->param.beta,
+			cosmo_halo_fit->param.mu, cosmo_halo_fit->param.nu);
+}
+
+double ccl_nonlin_matter_power_halofit(ccl_cosmology* cosmo, double a, double k, ccl_cosmology_halofit* cosmo_halo_fit)
+{
+	if (!cosmo_halo_fit->computed_halo_fit) ccl_cosmology_init_halofit(cosmo, a, cosmo_halo_fit);
+	
+	double non_lin_pk = ccl_one_halo_term(cosmo, a, k, cosmo_halo_fit) + ccl_two_halo_term(cosmo, a, k, cosmo_halo_fit);
+	return non_lin_pk / pow(k, 3.) * (2*M_PI*M_PI);
 }
