@@ -7,35 +7,35 @@
 #include <stdbool.h>
 
 typedef struct ccl_parameters {
-    // Densities: CDM, baryons, total matter, neutrinos, curvature
-    double Omega_c;
-    double Omega_b;
-    double Omega_m;
-    double Omega_n;
-    double Omega_k;
-
-    // Dark Energy
-    double w0;
-    double wa;
-
-    // Hubble parameters
-    double H0;
-    double h;
-
-    // Primordial power spectra
-    double A_s;
-    double n_s;
-
-    // Radiation parameters
-    double Omega_g;
-    double T_CMB;
-
-    // Derived parameters
-    double sigma_8;
-    double Omega_l;
-    double z_star;
-
-    //Modified growth rate
+  // Densities: CDM, baryons, total matter, neutrinos, curvature
+  double Omega_c;
+  double Omega_b;
+  double Omega_m;
+  double Omega_n;
+  double Omega_k;
+  
+  // Dark Energy
+  double w0;
+  double wa;
+  
+  // Hubble parameters
+  double H0;
+  double h;
+  
+  // Primordial power spectra
+  double A_s;
+  double n_s;
+  
+  // Radiation parameters
+  double Omega_g;
+  double T_CMB;
+  
+  // Derived parameters
+  double sigma_8;
+  double Omega_l;
+  double z_star;
+  
+  //Modified growth rate
   bool has_mgrowth;
   int nz_mgrowth;
   double *z_mgrowth;
@@ -46,24 +46,28 @@ typedef struct ccl_parameters {
 
 
 typedef struct ccl_data{
-    // These are all functions of the scale factor a.
-    // Distances are defined in EITHER Mpc or Mpc/h (TBC)
+  // These are all functions of the scale factor a.
+  // Distances are defined in Mpc
   double growth0;
   gsl_spline * chi;
   gsl_spline * growth;
   gsl_spline * fgrowth;
   gsl_spline * E;
+  gsl_spline * achi;
 
   // All these splines use the same accelerator so that
   // if one calls them successively with the same a value
   // they will be much faster.
   gsl_interp_accel *accelerator;
+  gsl_interp_accel *accelerator_achi;
+  gsl_interp_accel *accelerator_m;
+  //TODO: it seems like we're not really using this accelerator, and we should
   gsl_interp_accel *accelerator_k;
-  //TODO: why not use interpolation accelerators?
 
   // Function of Halo mass M
-  gsl_spline * sigma;
-  
+  gsl_spline * logsigma;
+  gsl_spline * dlnsigma_dlogm; 
+
   // These are all functions of the wavenumber k and the scale factor a.
   gsl_spline * p_lin;
   gsl_spline2d * p_nl;
@@ -107,7 +111,3 @@ void ccl_cosmology_free(ccl_cosmology * cosmo);
 void ccl_cosmology_compute_distances(ccl_cosmology * cosmo);
 void ccl_cosmology_compute_growth(ccl_cosmology * cosmo);
 void ccl_cosmology_compute_power(ccl_cosmology * cosmo);
-// Internal(?)
-
-// Distance-like function examples
-
