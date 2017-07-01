@@ -1,0 +1,15 @@
+In this directory, there are direct
+CLASS outputs ("ccl_*") that can be compared
+to CCL splines ("PS*"). These are for linear
+and nonlinear power spectra at z={0,3}.
+
+The code one "ccl_power_converge.c" in
+tests/ was used to produce the "PS*"
+outputs.
+
+The subdirectory "bilin" has CCL spectra
+obtained with bilinear splines instead
+of out fiducial bicubic.
+
+The code psconverge.py produces all figures
+for the comparison in the CCL note.
